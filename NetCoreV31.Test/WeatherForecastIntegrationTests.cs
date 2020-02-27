@@ -1,14 +1,16 @@
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
-
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using Moq;
 
 using NetCoreV31.Interfaces;
-
+using NetCoreV31.Services;
+using System;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -20,29 +22,39 @@ namespace NetCoreV31.Test
     {
         private const string _apiUrl = "api/weatherforecast";
 
-        [Fact]
-        public async Task Get_Returns_Weather_Forecast()
+        private readonly IHostBuilder _hostBuilder;
+
+        public WeatherForecastIntegrationTests()
         {
-            // Arrange
-            var hostBuilder = new HostBuilder()
+            _hostBuilder = new HostBuilder()
                 .UseServiceProviderFactory(new AutofacServiceProviderFactory())
+                .ConfigureContainer<ContainerBuilder>(builder =>
+                {
+                    builder.RegisterModule<ApiModule>();
+                })
                 .ConfigureWebHost(conf =>
                 {
                     conf.UseTestServer();
                     conf.UseStartup<Startup>();
-                    conf.ConfigureTestContainer<ContainerBuilder>(builder =>
-                    {
-                        var mockRequestValidationService = new Mock<IRequestValidationService>();
-                        mockRequestValidationService.Setup(service =>
-                                service.RequestCanBeProcessed())
-                            .Returns(true);
-
-                        builder.Register(c => mockRequestValidationService.Object)
-                            .As<IRequestValidationService>();
-                    });
                 });
+        }
 
-            var host = hostBuilder.Start();
+        [Fact]
+        public async Task Get_Returns_Weather_Forecast()
+        {
+            // Arrange
+            _hostBuilder.ConfigureContainer<ContainerBuilder>(builder =>
+            {
+                var mockRequestValidationService = new Mock<IRequestValidationService>();
+                mockRequestValidationService.Setup(service =>
+                        service.RequestCanBeProcessed())
+                    .Returns(true);
+
+                builder.Register(c => mockRequestValidationService.Object)
+                    .As<IRequestValidationService>();
+            });
+
+            var host = _hostBuilder.Start();
             var client = host.GetTestClient();
 
             // Act
@@ -56,25 +68,18 @@ namespace NetCoreV31.Test
         public async Task Get_Returns_BadRequest()
         {
             // Arrange
-            var hostBuilder = new HostBuilder()
-                .UseServiceProviderFactory(new AutofacServiceProviderFactory())
-                .ConfigureWebHost(conf =>
-                {
-                    conf.UseTestServer();
-                    conf.UseStartup<Startup>();
-                    conf.ConfigureTestContainer<ContainerBuilder>(builder =>
-                    {
-                        var mockRequestValidationService = new Mock<IRequestValidationService>();
-                        mockRequestValidationService.Setup(service =>
-                                service.RequestCanBeProcessed())
-                            .Returns(false);
+            _hostBuilder.ConfigureContainer<ContainerBuilder>(builder =>
+            {
+                var mockRequestValidationService = new Mock<IRequestValidationService>();
+                mockRequestValidationService.Setup(service =>
+                        service.RequestCanBeProcessed())
+                    .Returns(false);
 
-                        builder.Register(c => mockRequestValidationService.Object)
-                            .As<IRequestValidationService>();
-                    });
-                });
+                builder.Register(c => mockRequestValidationService.Object)
+                    .As<IRequestValidationService>();
+            });
 
-            var host = hostBuilder.Start();
+            var host = _hostBuilder.Start();
             var client = host.GetTestClient();
 
             // Act
